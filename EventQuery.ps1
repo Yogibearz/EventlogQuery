@@ -1,6 +1,6 @@
 #Requires -version 2.0
 #
-# powershell -command "& {./EventlogQuery.1.9.9.8.ps1}"
+# powershell -command "& {./EventlogQuery.1.9.9.9.ps1}"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -8,7 +8,7 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.8"
+$version = "1.9.9.9"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
 $pwd = $(Get-Location)
@@ -113,6 +113,7 @@ $Events = $Events | Sort-Object
 Foreach ($Machine in $computers) {
    $mbegin = get-date
    $ErrorActionPreference = "SilentlyContinue"
+   $resolve = ""
    $resolve = [System.Net.Dns]::GetHostAddresses($Machine)
    
    if (ping($Machine) -and $resolve -ne $Null) {
@@ -128,11 +129,12 @@ Foreach ($Machine in $computers) {
       #	 $resolve = ""
       #	 $reverseResolve = ""
       #} else {
+      	 $reverseResolve = ""
       	 $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
       #}	 	
-
+       
       $log.info(("{0} : {1} : {2}" -f $Machine,$resolve,$reverseResolve))
-      if ($resolve -match "10*") { Continue }
+      #if ($resolve -match "10*") { Continue }
 
       $cuttime = [datetime]::ParseExact("20000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
