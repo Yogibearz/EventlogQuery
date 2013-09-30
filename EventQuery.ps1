@@ -8,14 +8,14 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.4"
+$version = "1.9.9.5"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
 $pwd = $(Get-Location)
 $begin = get-date
 
 if (-not(Test-Path $configF)) { write-host "$configF missing"; exit -999}
-	
+
 [xml]$R = Get-Content $configF
 
 $debug = $R.config.debug
@@ -23,7 +23,7 @@ $debug = $R.config.debug
 #if ($debug){ Set-Location -Path f:\temp\don }
 
 if ($R.config.version -ne $version) { write-host "wrong version of configuration.xml"; exit -999}
-	
+
 if ((Test-Path "$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") -and (Test-Path "$pwd\$($R.config.log.logconfig)")) {
    [System.Reflection.Assembly]::LoadFrom("$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") | out-null
    $log4netconfigfile = new-Object System.Io.FileInfo("$pwd\$($R.config.log.logconfig)")
@@ -87,7 +87,7 @@ if (Test-Path "$pwd\$TimestampsFile") {
   $log.Info("Cut Time Loaded")
 }
 
-[int[]]$Events = $($R.config.filter.eventid).split(",") 
+[int[]]$Events = $($R.config.filter.eventid).split(",")
 
 ###
 # Check each machine
@@ -99,7 +99,7 @@ $strNT = @()
 
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
-	 $computers = ('UMCS19', 'UMCS20')
+	 $computers = ('UMCS19', 'UMCS20','UMC024813')
 } else {
 	 For ($i=1; $i -le 500; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 }
@@ -152,11 +152,12 @@ Foreach ($Machine in $computers) {
          	  $log.debug("CatchFlag [$CatchFlag]")
          }
       }
-      Catch [System.UnauthorizedAccessException]{
+      #Catch [System.UnauthorizedAccessException]{
+      Catch {
          $ErrorMessage = $_.Exception.Message
          $FailedItem = $_.Exception.ItemName
          $ErrorMessage = $ErrorMessage -replace "`t|`n|`r",""
-         $log.error("Fail to get $Machine eventlog [$ErrorMessage]")
+         $log.error("*Fail to get $Machine eventlog [$ErrorMessage]")
          $CatchFlag = 1
       }
       Finally {
@@ -165,31 +166,31 @@ Foreach ($Machine in $computers) {
          	   $CatchFlag = -1
          }
          $log.debug("[F] CatchFlag [$CatchFlag] $Machine count [" + $result.count + "]")
-         if ($CatchFlag -eq 0) {
+         if ($CatchFlag -eq 0 -or ([bool]$result.count)) {
             $log.debug("$Machine count [" + $result.count + "]")
             $count += $result.count
             $messages += $result
             $log.debug("Total count [" + $messages.count + "]")
-         }         
+         }
       }
       $ErrorActionPreference = 'Stop'
-      if ($CatchFlag -ne 0) {
+      if ($CatchFlag -ne 0 -and (-not [bool]$result.count)) {
       	 if ($oldcuttime -eq $null) {
       	 	  $Timestamps.remove($Machine)
       	 	  $log.debug("$Machine reset cuttime as none")
-      	 } else {
-      	    $Timestamps["$Machine"] = $oldcuttime
-      	    $log.debug("$Machine reset cuttime $oldcuttime")
       	 }
-      	 $CatchFlag = 0
       } else {
+      	 if ([bool]$result.count) {
+      	    $sortRecords = ($result | Sort-Object -descending TimeGenerated)[0].TimeGenerated
+      	    $Timestamps["$Machine"] = [system.management.managementdatetimeconverter]::todatetime($sortRecords)
+      	    $log.debug("$Machine set cuttime {0}" -f $Timestamps["$Machine"])
+      	 }   
       	 $strF += ("{0} {1}" -f $Machine,$filter)
       	 $strNT += ("{0} [{1}] [{2}]" -f $Machine,$oldcuttime,$Timestamps["$Machine"])
          $mend = get-date
          $mts = $mend - $mbegin
          $log.info("$Machine Process time [" + ('{0:00}:{1:00}:{2:00}' -f $mts.Hours,$mts.Minutes,$mts.Seconds) + "]")
-      }    	
-
+      }
    } else {
    	  $log.info("$Machine not alive")
       if ($oldcuttime -eq $null) {
@@ -241,50 +242,6 @@ TABLE TR:hover TD { background:#BAFECB !important; }
 TABLE.group {vertical-align: middle;width: auto;}
 TABLE.group TD,TH {vertical-align: middle;text-align: center; padding:2px 10px 2px 10px;}
 </style>
-<!--
-<script type="text/javascript"> 
-	window.onload = rowcolor();
-	function rowcolor() {
-     var TableIDvalue = "maintable";
-     
-     // Place 2 --
-     // Specify which every so many rows to update with a 
-     //    background color. Every other row would be the 
-     //    number 2. Every third row the number 3. And so forth.
-     
-     var colorValue = 0;
-     var currentcolorValue = "";
-     
-     // Place 3 --
-     // Specify the background color for the alternate rows.  
-     //    Any legal CSS color value is acceptable; hex, rgb,  
-     //    or color name.
-     
-     var BackgroundColorA = "#9ff";
-     var BackgroundColorB = "#FFFFBE";
-     
-     //
-     // End of customization.
-     //
-     // // // // // // // // // //
-     var table = document.getElementById(TableIDvalue);
-     var rows = table.rows;
-     alert('test test');
-     
-     for( var i=1; i<rows.length; i++ ) {
-        if( rows[i].cells[2].innerHTML != currentcolorValue ) {
-           currentcolorValue = rows[i].cells[2].innerHTML;
-           colorValue++;
-        }      
-        if (colorValue%2 == 0) {
-           table.rows[i].style.backgroundColor = BackgroundColorA;
-        } else {
-           table.rows[i].style.backgroundColor = BackgroundColorB;
-        }
-     }   
-  }
-</script>
--->  
 "@
 
 
@@ -311,13 +268,13 @@ if ($count -gt 0) {
         -PreContent $groupby `
         -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().Replace('.UMC.COM','')}}, `
         @{LABEL="TimeGenerated"; EXPRESSION = {"{0:$logdatetime}" -f $_.convertToDateTime($_.TimeGenerated)}}, `
-        EventCode, EventType, SourceName, Message, RecordNumber | Set-Content "$attach"
+        EventCode, EventType, SourceName, Message | Set-Content -Encoding UTF8 "$attach"
         #foreach-object {$_.replace("<table>","<table id='maintable'>")} | `
-        
+
    if ($debug -and (Test-Path "$attach")) { Invoke-Item "$attach" }
    $log.debug("Matched eventlogs HTML saved")
 }
-$Timestamps.GetEnumerator() | Select Key,Value,@{Name="Type";Expression={$_.value.gettype().name}} | Export-CSV -path "$pwd\$TimestampsFile" -force
+$Timestamps.GetEnumerator() | Select Key,Value,@{Name="Type";Expression={$_.value.gettype().name}} | Sort-Object Name | Export-CSV -path "$pwd\$TimestampsFile" -force
 if ($count -gt 0) {
    $log.debug("Cut Time CSV $pwd\$TimestampsFile Saved ({0:$dateformat})" -f (Get-Item "$pwd\$TimestampsFile").LastWriteTime)
 }
