@@ -1,11 +1,12 @@
 #
-# V 1.8
+# V 1.9.2
 #
-# powershell -command "& './EventlogQuery.1.8.ps1'"
+# powershell -command "& './EventlogQuery.1.9.2.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 
 set-psdebug -strict
+Set-Location -Path f:\temp\don
 $ErrorActionPreference = 'Stop'
 $log = $null
 $pwd = "."
@@ -72,7 +73,7 @@ if ((Test-Path "$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") -a
 $messages = @()
 $count = 0
 
-$computers = ('UMCS18', 'UMCS20', 'UMCS19')
+$computers = ('UMCS19', 'UMCS20')
 $Timestamps = @{}
 $TimestampsFile = 'Timestamps.csv'
 $dateformat = "yyyyMMdd-HHmmss"
@@ -118,11 +119,12 @@ if (Test-Path "$pwd\$TimestampsFile") {
 # Check each machine
 ###
 
+$filter = "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
 #Foreach ($Machine in $computers) {
 For ($i=1; $i -le 500; $i++) {
    $Machine = 'UMCVW' + (7000 + $i)
 
-   if (test-connection -computer $machine -count 1 -erroraction 0 -quiet) { 
+   if (ping($Machine)) { 
       $cuttime = [datetime]::ParseExact("19000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
       if ($Timestamps.ContainsKey($Machine)) {
@@ -133,16 +135,28 @@ For ($i=1; $i -le 500; $i++) {
       $Timestamps["$Machine"] = $(get-date -format $dateformat)
       $log.Debug("$Machine new cut time [" + $Timestamps["$Machine"] + "]")
       
-      $ErrorActionPreference = 'SilentContinue'
+      $ErrorActionPreference = 'SilentlyContinue'
       
       $CatchFlag = 0
+      $result = @()
       
       $strCuttime = [System.Management.ManagementDateTimeConverter]::ToDMTFDateTime($cuttime)
+      
+      $log.debug("TimeGenerated > $strCuttime")
+       
       try {
-         $message = Get-WmiObject -Computer $Machine -Class Win32_NTLogEvent `
-                       -Filter "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013)"
-         if ($?) {
+         #$result = Get-WmiObject -Computer $Machine -Class "Win32_NTLogEvent" -Filter "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
+         #$result = Get-WmiObject -Computer $Machine -Query "select * from Win32_NTLogEvent where (logfile='System') AND (TimeGenerated > '$strCuttime')" `
+         #            | where-object {$_.EventCode -eq 7 -OR $_.EventCode -eq 14 -OR $_.EventCode -eq 41 -OR $_.EventCode -eq 1117 `
+         #           -OR $_.EventCode -eq 6072 -OR $_.EventCode -eq 6013 -OR $_.EventCode -eq 1085}
+         $rowlog = Get-WmiObject -Computer $Machine -Class "Win32_NTLogEvent" -Filter "logfile='System' AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
+         #$result = $rawlog | where-object {$_TimeGenerated -gt '$strCuttime' -and ($_.EventCode -eq 7 -OR $_.EventCode -eq 14 -OR $_.EventCode -eq 1117 `
+         #           -OR $_.EventCode -eq 6072 -OR $_.EventCode -eq 6013 -OR $_.EventCode -eq 1085)}
+         if (! $?) {
          	  $CatchFlag = -1
+         	  $log.debug("CatchFlag [$CatchFlag]")
+         } else {
+         	  $result = $rowlog | where-object {$_.TimeGenerated -gt '$strCuttime'}
          }
       }
       Catch [System.UnauthorizedAccessException]{
@@ -157,10 +171,12 @@ For ($i=1; $i -le 500; $i++) {
          	   $log.error("Fail to get $Machine eventlog [WMI COM (RPC) not available]")
          	   $CatchFlag = -1
          }
+         $log.debug("[F] CatchFlag [$CatchFlag] $Machine count [" + $result.count + "]")
          if ($CatchFlag -eq 0) {  
-            $log.debug("$Machine count [$message.count]")
-            $count += $message.count
-            $messages += $message
+            $log.debug("$Machine count [" + $result.count + "]")
+            $count += $result.count
+            $messages += $result
+            $log.debug("Total count [" + $messages.count + "]")
          }         
          $CatchFlag = 0
       }
