@@ -1,6 +1,6 @@
 #Requires -version 2.0
 #
-# powershell -command "& {./EventlogQuery.1.9.9.6.ps1}"
+# powershell -command "& {./EventlogQuery.1.9.9.8.ps1}"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -8,7 +8,7 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.7"
+$version = "1.9.9.8"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
 $pwd = $(Get-Location)
@@ -101,26 +101,36 @@ $strNT = @()
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
 	 $computers = ('UMCS19', 'UMCS20','UMC024813')
-	 For ($i=91; $i -le 95; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
-	 For ($i=375; $i -le 375; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
+	 #For ($i=91; $i -le 95; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
+	 #For ($i=375; $i -le 375; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 } else {
 	 For ($i=1; $i -le 500; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
+	 For ($i=1; $i -le 20; $i++) { $computers += ('UMCVX' + $i.ToString("0000")) }
 }
 
 $Events = $Events | Sort-Object
 
 Foreach ($Machine in $computers) {
    $mbegin = get-date
-   if (ping($Machine)) {
+   $ErrorActionPreference = "SilentlyContinue"
+   $resolve = [System.Net.Dns]::GetHostAddresses($Machine)
+   
+   if (ping($Machine) -and $resolve -ne $Null) {
 
       #if windows 7
       #$ServiceStatus = (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").Status
       #if ($ServiceStatus -eq "Stopped") {
       #   (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").StartService()
       #}
-      
-      $resolve = [System.Net.Dns]::GetHostAddresses($Machine)[0].IPAddressToString
-      $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
+
+      $ErrorActionPreference = "SilentlyContinue"
+      #if ($resolve -eq $Null) { 
+      #	 $resolve = ""
+      #	 $reverseResolve = ""
+      #} else {
+      	 $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
+      #}	 	
+
       $log.info(("{0} : {1} : {2}" -f $Machine,$resolve,$reverseResolve))
       if ($resolve -match "10*") { Continue }
 
@@ -138,7 +148,6 @@ Foreach ($Machine in $computers) {
       $Timestamps["$Machine"] = (get-date).toString($dateformat)
       $log.Debug("$Machine new cut time [" + $Timestamps["$Machine"] + "]")
 
-      $ErrorActionPreference = "SilentlyContinue"
 
       $CatchFlag = 0
       $result = @()
@@ -150,14 +159,15 @@ Foreach ($Machine in $computers) {
       $filter  = "logfile='$($R.config.filter.eventlogfile)' AND TimeWritten > '$strCuttime' "
       $filter += "AND (EventCode=" + [string]::join(" OR EventCode=", $Events) + ")"
 
-      try {
+      Try {
          #$log.debug($filter)
-         Measure-Command {
+         #Measure-Command {
          $result = Get-WmiObject -EA SilentlyContinue -Computer $Machine -Class "Win32_NTLogEvent" -Filter $filter
-         }
+         #}
          if (! $?) {
          	  $CatchFlag = -1
          	  $log.debug("CatchFlag [$CatchFlag]")
+         	  throw $error[0].Exception
          }
       }
       #Catch [System.UnauthorizedAccessException]{
@@ -202,7 +212,11 @@ Foreach ($Machine in $computers) {
          $log.info("$Machine Process time [" + ('{0:00}:{1:00}:{2:00}' -f $mts.Hours,$mts.Minutes,$mts.Seconds) + "]")
       }
    } else {
-   	  $log.info("$Machine not alive")
+   	  if ($resolve -eq $Null) {
+   	  	 $log.error("$Machine has no A record")
+   	  } else {
+   	  	 $log.info("$Machine not alive")
+   	  }
       if ($oldcuttime -eq $null) {
       	  $Timestamps.remove($Machine)
       	  $log.debug("$Machine reset cuttime as none")
