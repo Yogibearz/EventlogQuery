@@ -100,12 +100,12 @@ $strNT = @()
 
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
-	 $computers = ('UMCS19', 'UMCS20','UMC024813')
+	 $computers = ('U-S19', 'U-S20','U-024813')
 	 #For ($i=91; $i -le 95; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 	 #For ($i=375; $i -le 375; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 } else {
-	 For ($i=1; $i -le 500; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
-	 For ($i=1; $i -le 20; $i++) { $computers += ('UMCVX' + $i.ToString("0000")) }
+	 For ($i=1; $i -le 500; $i++) { $computers += ('U-VW' + (7000 + $i)) }
+	 For ($i=1; $i -le 20; $i++) { $computers += ('U-VX' + $i.ToString("0000")) }
 }
 
 $Events = $Events | Sort-Object
@@ -322,8 +322,8 @@ $CatchFlag = 0
 if ($count -gt 0) {
    try {
       Send-MailMessage -To $emailTo -Subject $subject -Body " " `
-      								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
-      								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
+      	-SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
+      	-DeliveryNotificationOption OnFailure -ErrorAction Continue
    } catch {
       $ErrorMessage = $_.Exception.Message
       $FailedItem = $_.Exception.ItemName
@@ -335,8 +335,8 @@ if ($count -gt 0) {
 } else {
    try {
 	    Send-MailMessage -To $emailTo -Subject $subject -Body " " `
-      								 -SmtpServer $smtpServer -From $emailFrom `
-      								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
+      		-SmtpServer $smtpServer -From $emailFrom `
+      		-DeliveryNotificationOption OnFailure -ErrorAction Continue
    } catch {
       $ErrorMessage = $_.Exception.Message
       $FailedItem = $_.Exception.ItemName
