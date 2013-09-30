@@ -101,8 +101,8 @@ $strNT = @()
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
 	 $computers = ('U-S19', 'U-S20','U-024813')
-	 #For ($i=91; $i -le 95; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
-	 #For ($i=375; $i -le 375; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
+	 #For ($i=91; $i -le 95; $i++) { $computers += ('U-VW' + (7000 + $i)) }
+	 #For ($i=375; $i -le 375; $i++) { $computers += ('U-VW' + (7000 + $i)) }
 } else {
 	 For ($i=1; $i -le 500; $i++) { $computers += ('U-VW' + (7000 + $i)) }
 	 For ($i=1; $i -le 20; $i++) { $computers += ('U-VX' + $i.ToString("0000")) }
@@ -237,7 +237,7 @@ $log.info("Matched eventlogs [$count]")
 
 #$groupbyA = $messages | Group-Object ComputerName,EventCode
 $groupby = $messages | Group-Object ComputerName,EventCode | Sort-Object Name | `
-           ConvertTo-HTML -Fragment -property @{LABEL='Name'; EXPRESSION={$_.Name.ToUpper().Replace('.UMC.COM','').split(", ")[0]}}, `
+           ConvertTo-HTML -Fragment -property @{LABEL='Name'; EXPRESSION={$_.Name.ToUpper().Replace('.U-.COM','').split(", ")[0]}}, `
            @{LABEL='Event ID';EXPRESSION={$_.Name.split(", ")[2]}}, Count | `
            foreach {$_.replace("</table>","</table>`n<p><br /></p>").replace("<table>","<table class='group'>")}
 
@@ -292,7 +292,7 @@ if ($count -gt 0) {
    #     EventCode, EventType, SourceName, Message, RecordNumber > "$pwd\Filter-$outputT.html"
    $messages | Sort-Object ComputerName, TimeGenerated | ConvertTo-HTML -Title "$outputT" -head $oHead -Body $oPost `
         -PreContent $groupby `
-        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().Replace('.UMC.COM','')}}, `
+        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().Replace('.U-.COM','')}}, `
         @{LABEL="TimeGenerated"; EXPRESSION = {"{0:$logdatetime}" -f $_.convertToDateTime($_.TimeGenerated)}}, `
         EventCode, EventType, SourceName, Message | Set-Content -Encoding UTF8 "$attach"
         #foreach-object {$_.replace("<table>","<table id='maintable'>")} | `
@@ -313,7 +313,7 @@ if ($count -gt 0) {
 # Mail out result
 ###
 
-$emailFrom = "VDI_Scan@umc.com"
+$emailFrom = "VDI_Scan@u-um.com"
 $emailTo = $($R.config.mail.to).split(",")
 $subject = "Suspicious Events ($count)"
 $smtpServer = $R.config.mail.smtpserver
