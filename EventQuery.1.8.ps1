@@ -1,7 +1,7 @@
 #
-# V 1.7
+# V 1.8
 #
-# powershell -command "& './EventlogQuery.1.7.ps1'"
+# powershell -command "& './EventlogQuery.1.8.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 
@@ -122,7 +122,7 @@ if (Test-Path "$pwd\$TimestampsFile") {
 For ($i=1; $i -le 500; $i++) {
    $Machine = 'UMCVW' + (7000 + $i)
 
-   if (ping($Machine)) { 
+   if (test-connection -computer $machine -count 1 -erroraction 0 -quiet) { 
       $cuttime = [datetime]::ParseExact("19000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
       if ($Timestamps.ContainsKey($Machine)) {
@@ -140,10 +140,9 @@ For ($i=1; $i -le 500; $i++) {
       $strCuttime = [System.Management.ManagementDateTimeConverter]::ToDMTFDateTime($cuttime)
       try {
          $message = Get-WmiObject -Computer $Machine -Class Win32_NTLogEvent `
-                       -Filter "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
+                       -Filter "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013)"
          if ($?) {
          	  $CatchFlag = -1
-         	  $log.debug("CatchFlag [$CatchFlag]")
          }
       }
       Catch [System.UnauthorizedAccessException]{
@@ -158,16 +157,14 @@ For ($i=1; $i -le 500; $i++) {
          	   $log.error("Fail to get $Machine eventlog [WMI COM (RPC) not available]")
          	   $CatchFlag = -1
          }
-         $log.debug("CatchFlag [$CatchFlag] $Machine count [" + $message.count + "]")
          if ($CatchFlag -eq 0) {  
-            $log.debug("$Machine count [" + $message.count + "]")
+            $log.debug("$Machine count [$message.count]")
             $count += $message.count
             $messages += $message
          }         
          $CatchFlag = 0
       }
       $ErrorActionPreference = 'Stop'
-      $log.debug("CatchFlag [$CatchFlag] $Machine count [" + $message.count + "]")
       
    } else {
    	  $log.info("$Machine not alive")
