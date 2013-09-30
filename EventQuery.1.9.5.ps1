@@ -1,66 +1,29 @@
+#Requires -version 2.0
 #
-# V 1.9.2
+# V 1.9.5
 #
-# powershell -command "& './EventlogQuery.1.9.2.ps1'"
+# powershell -command "& './EventlogQuery.1.9.5.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
+# Set-ExecutionPolicy RemoteSigned
 
 set-psdebug -strict
-Set-Location -Path f:\temp\don
+
+if ("UMCS20UMCS19" -like "$env:computername*" ){ Set-Location -Path f:\temp\don }
+	
 $ErrorActionPreference = 'Stop'
+$version = "1.9.5"
 $log = $null
 $pwd = "."
 $begin = get-date
 
-#filter Select-Alive {
-#	param ( [switch]$Verbose )
-#	trap {
-#		Write-Verbose "$(get-date -f 's') ping failed: $computer"
-#		continue
-#	}
-#	if ($Verbose) {
-#		$VerbosePreference = "continue"
-#		$ErrorActionPreference = "continue"
-#	}
-#	else {
-#		$VerbosePreference = "silentlycontinue"
-#		$ErrorActionPreference = "silentlycontinue"
-#	}
-#	Write-Verbose "$(get-date -f 's') ping start"
-#	$ping = New-Object System.Net.NetworkInformation.Ping
-#	$reply = $null
-#	$_ | foreach-object {
-#		$obj = $_
-#		# Accomodate different input object types
-#		# thx Gaurhoth (http://thepowershellguy.com/blogs/gaurhoth/archive/2007/10/08/an-example-of-how-to-use-new-taskpool.aspx)
-#		switch ($obj.psbase.gettype().name) {
-#			"DirectoryEntry"    { $cn = $obj.dnshostname[0] }
-#			"IPHostEntry"		{ $cn = $obj.HostName }
-#			"PSCustomObject"    { $cn = $obj.Name }
-#			"SearchResult"      { $cn = $obj.properties['dnshostname'][0] }
-#			"String"            { $cn = $obj.trim() }
-#		}
-#		Write-Verbose "$(get-date -f 's') pinging $cn..."
-#		$searchCount++
-#		$reply = $ping.Send($cn)
-#		if ($reply.status -eq "Success") {
-#			$cn; $pingCount++
-#		}
-#	}
-#	Write-Verbose "$(get-date -f 's') ping end - $pingCount/$searchCount online"
-#}
-
-
 if ((Test-Path "$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") -and (Test-Path "$pwd\log4net.config")) {
-   #$log = New-Logger -Configuration "$pwd\log4net.config" -Dll "$pwd\log4net.dll" -Verbose
-   #$log.DebugFormat("Logger configuration file is : '{0}'", (Resolve-Path "$pwd\log4net.config"))
-   #$log.InfoFormat("test test {0}", "log4test")
    [System.Reflection.Assembly]::LoadFrom("$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") | out-null
    $log4netconfigfile = new-Object System.Io.FileInfo("$pwd\log4net.config")
    [log4net.LogManager]::ResetConfiguration()
    [log4net.Config.XmlConfigurator]::ConfigureAndWatch($log4netconfigfile)
    $log = [log4net.LogManager]::GetLogger("root")
-   $log.info("== Job Start ==")
+   $log.info("== Job Start $version ==")
 } else {
 	 Write-host "log4net.dll or log4net.config missing"
 	 exit -100
@@ -85,6 +48,12 @@ $a = $a + "TABLE{border-width: 1px;border-style: solid;border-color: black;borde
 $a = $a + "TH{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color:thistle}"
 $a = $a + "TD{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color:palegoldenrod}"
 $a = $a + "</style>"
+
+###
+# Check OS
+###
+
+$los = Get-WmiObject -Query "Select Caption from Win32_OperatingSystem" -EnableAllPrivileges
 
 ###
 # Load back last scan time for each machine
@@ -124,7 +93,15 @@ $filter = "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode
 For ($i=1; $i -le 500; $i++) {
    $Machine = 'UMCVW' + (7000 + $i)
 
+   $mbegin = get-date
    if (ping($Machine)) { 
+      
+      #if windows 7
+      #$ServiceStatus = (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").Status
+      #if ($ServiceStatus -eq "Stopped") {
+      #   (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").StartService()
+      #}
+      
       $cuttime = [datetime]::ParseExact("19000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
       if ($Timestamps.ContainsKey($Machine)) {
@@ -135,7 +112,7 @@ For ($i=1; $i -le 500; $i++) {
       $Timestamps["$Machine"] = $(get-date -format $dateformat)
       $log.Debug("$Machine new cut time [" + $Timestamps["$Machine"] + "]")
       
-      $ErrorActionPreference = 'SilentlyContinue'
+      $ErrorActionPreference = "SilentlyContinue"
       
       $CatchFlag = 0
       $result = @()
@@ -149,14 +126,14 @@ For ($i=1; $i -le 500; $i++) {
          #$result = Get-WmiObject -Computer $Machine -Query "select * from Win32_NTLogEvent where (logfile='System') AND (TimeGenerated > '$strCuttime')" `
          #            | where-object {$_.EventCode -eq 7 -OR $_.EventCode -eq 14 -OR $_.EventCode -eq 41 -OR $_.EventCode -eq 1117 `
          #           -OR $_.EventCode -eq 6072 -OR $_.EventCode -eq 6013 -OR $_.EventCode -eq 1085}
-         $rowlog = Get-WmiObject -Computer $Machine -Class "Win32_NTLogEvent" -Filter "logfile='System' AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
+         $rawlog = Get-WmiObject -EA SilentlyContinue -Computer $Machine -Class "Win32_NTLogEvent" -Filter "logfile='System' AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013)"
          #$result = $rawlog | where-object {$_TimeGenerated -gt '$strCuttime' -and ($_.EventCode -eq 7 -OR $_.EventCode -eq 14 -OR $_.EventCode -eq 1117 `
          #           -OR $_.EventCode -eq 6072 -OR $_.EventCode -eq 6013 -OR $_.EventCode -eq 1085)}
          if (! $?) {
          	  $CatchFlag = -1
          	  $log.debug("CatchFlag [$CatchFlag]")
          } else {
-         	  $result = $rowlog | where-object {$_.TimeGenerated -gt '$strCuttime'}
+         	  $result = $rawlog | where-object {$_.TimeGenerated -gt '$strCuttime'}
          }
       }
       Catch [System.UnauthorizedAccessException]{
@@ -185,6 +162,14 @@ For ($i=1; $i -le 500; $i++) {
    } else {
    	  $log.info("$Machine not alive")
    }
+   
+   # for Windows 7
+   #if ($ServiceStatus -eq "Stopped") {
+   #	  (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").StopService()
+   #}
+   $mend = get-date
+   $mts = $mend - $mbegin
+   $log.info("$Machine Process time [" + ('{0:00}:{1:00}:{2:00}' -f $mts.Hours,$mts.Minutes,$mts.Seconds) + "]")
 
 }
 $log.info("Matched eventlogs [$count]")
@@ -211,11 +196,11 @@ if ($count -gt 0) {
    $emailTo = "arvin_ch_lin@umc.com,donal_sun@umc.com"
    $subject = "Suspicious Events ($count)"
    #$messages = Get-ChildItem UMC*.html -name $workpath | foreach ($a in $vara) {Get-Content $files -Delimiter ([char]0)}
-   $smtpServer = "10.10.8.18"
+   $smtpServer = "F12AG01"
 
    Send-MailMessage -To $emailTo -Subject $subject -Body " " `
    								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$pwd\Filter-$outputT.html" `
-   								 -DeliveryNotificationOption OnFailure
+   								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
    $log.info("Mail sent")
 } else {
 	 $log.info("*** No matched eventlog")
