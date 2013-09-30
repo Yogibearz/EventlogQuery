@@ -1,8 +1,8 @@
 #Requires -version 2.0
 #
-# V 1.9.5
+# V 1.9.6
 #
-# powershell -command "& './EventlogQuery.1.9.5.ps1'"
+# powershell -command "& './EventlogQuery.1.9.6.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -88,7 +88,7 @@ if (Test-Path "$pwd\$TimestampsFile") {
 # Check each machine
 ###
 
-$filter = "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072 OR EventCode=6013 OR EventCode=1085)"
+$filter = "(logfile='System') AND (TimeGenerated > '$strCuttime') AND (EventCode=7 OR EventCode=14 OR EventCode=41 OR EventCode=1117 OR EventCode=6072)"
 #Foreach ($Machine in $computers) {
 For ($i=1; $i -le 500; $i++) {
    $Machine = 'UMCVW' + (7000 + $i)
