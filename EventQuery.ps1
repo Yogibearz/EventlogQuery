@@ -1,6 +1,6 @@
 #Requires -version 2.0
 #
-# powershell -command "& './EventlogQuery.1.9.9.5.ps1'"
+# powershell -command "& {./EventlogQuery.1.9.9.7.ps1}"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -8,7 +8,7 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.5"
+$version = "1.9.9.7"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
 $pwd = $(Get-Location)
@@ -47,9 +47,11 @@ $count = 0
 $Timestamps = @{}
 $TimestampsFile = $R.config.log.timestamp
 $dateformat = $R.config.log.attachpostfix
-$outputT = get-date -format $dateformat
+$outputT = (get-date).toString($dateformat)
 $oldcuttime = $null
 $logdatetime = $R.config.log.datetime
+$htmlfileage = $R.config.oldfiles.htmlfileage
+$timestampfileage = $R.config.oldfiles.timestampfileage
 
 
 ###
@@ -62,7 +64,6 @@ $logdatetime = $R.config.log.datetime
 # Load back last scan time for each machine
 ###
 
-$Timestamps = @{}
 
 if (Test-Path "$pwd\$TimestampsFile") {
 	#$Timestamps = Import-CSVtoHash "$pwd\$TimestampsFile"
@@ -100,6 +101,8 @@ $strNT = @()
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
 	 $computers = ('UMCS19', 'UMCS20','UMC024813')
+	 For ($i=91; $i -le 95; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
+	 For ($i=375; $i -le 375; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 } else {
 	 For ($i=1; $i -le 500; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 }
@@ -115,6 +118,16 @@ Foreach ($Machine in $computers) {
       #if ($ServiceStatus -eq "Stopped") {
       #   (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").StartService()
       #}
+      
+      Try {
+         $resolve = [System.Net.Dns]::GetHostAddresses($Machine)[0].IPAddressToString
+         $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
+      }
+      Catch {
+      }
+      Finally {
+         $log.info(("{0} : {1} : {2}" -f $Machine,$resolve,$reverseResolve))
+      }
 
       $cuttime = [datetime]::ParseExact("20000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
@@ -127,7 +140,7 @@ Foreach ($Machine in $computers) {
       	 $oldcuttime = $null
       }
 
-      $Timestamps["$Machine"] = $(get-date -format $dateformat)
+      $Timestamps["$Machine"] = (get-date).toString($dateformat)
       $log.Debug("$Machine new cut time [" + $Timestamps["$Machine"] + "]")
 
       $ErrorActionPreference = "SilentlyContinue"
@@ -181,8 +194,10 @@ Foreach ($Machine in $computers) {
       	 }
       } else {
       	 if ([bool]$result.count) {
+      	    # get newest record time
       	    $sortRecords = ($result | Sort-Object -descending TimeGenerated)[0].TimeGenerated
-      	    $Timestamps["$Machine"] = [system.management.managementdatetimeconverter]::todatetime($sortRecords)
+      	    #$Timestamps["$Machine"] = (([system.management.managementdatetimeconverter]::todatetime($sortRecords)) -format $dateformat)
+      	    $Timestamps["$Machine"] = [system.management.managementdatetimeconverter]::todatetime($sortRecords).toString($dateformat)
       	    $log.debug("$Machine set cuttime {0}" -f $Timestamps["$Machine"])
       	 }   
       	 $strF += ("{0} {1}" -f $Machine,$filter)
@@ -274,6 +289,10 @@ if ($count -gt 0) {
    if ($debug -and (Test-Path "$attach")) { Invoke-Item "$attach" }
    $log.debug("Matched eventlogs HTML saved")
 }
+
+#Get-Item "$pwd\$TimestampsFile" | Rename-Item $_ "$($_.DirectoryName)\$($_.BaseName).$($_.LastWriteTime.toString($dateformat))$($_.extension)"
+Get-Item "$pwd\$TimestampsFile" | foreach-object {$newName = "$($_.DirectoryName)\$($_.BaseName).$($_.LastWriteTime.toString($dateformat))$($_.extension)" ; Rename-Item $_.Fullname -newname $newName }
+
 $Timestamps.GetEnumerator() | Select Key,Value,@{Name="Type";Expression={$_.value.gettype().name}} | Sort-Object Name | Export-CSV -path "$pwd\$TimestampsFile" -force
 if ($count -gt 0) {
    $log.debug("Cut Time CSV $pwd\$TimestampsFile Saved ({0:$dateformat})" -f (Get-Item "$pwd\$TimestampsFile").LastWriteTime)
@@ -318,11 +337,10 @@ if ($count -gt 0) {
 }
 
 ###
-# Remove old scan files
+# Remove old scan result files
 ###
 
-$Days = 7
-$LastWrite = $([datetime]::ParseExact($outputT, $dateformat, $null)).AddDays(-$Days)
+$LastWrite = $([datetime]::ParseExact($outputT, $dateformat, $null)).AddDays(-$htmlfileage)
 $OldFiles = Get-Childitem $pwd -Include "$($R.config.log.attachprefix)*.html" | Where {$_.LastWriteTime -le "$LastWrite"}
 
 foreach ($XFile in $OldFiles) {
@@ -333,6 +351,23 @@ foreach ($XFile in $OldFiles) {
        Write-Host "No more files to delete!" -foregroundcolor "Green"
    }
 }
+
+###
+# Remove old timestamp files
+###
+
+$LastWrite = $([datetime]::ParseExact($outputT, $dateformat, $null)).AddDays(-$timestampfileage)
+$OldFiles = Get-Childitem "$pwd\*.*" -Include "$($TimestampsFile.split(".")[0])*.$($TimestampsFile.split(".")[1])" -Exclude $TimestampsFile | Where {$_.LastWriteTime -le "$LastWrite"}
+
+foreach ($XFile in $OldFiles) {
+   if ($XFile -ne $NULL) {
+       $log.info("Delete File $XFile")
+       #Remove-Item $XFile.FullName #| out-null
+   } else {
+       Write-Host "No more files to delete!" -foregroundcolor "Green"
+   }
+}
+
 
 $end = get-date
 $ts = $end - $begin
