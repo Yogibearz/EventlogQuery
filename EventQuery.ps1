@@ -1,8 +1,6 @@
 #Requires -version 2.0
 #
-# V 1.9.9.1
-#
-# powershell -command "& './EventlogQuery.1.9.9.1.ps1'"
+# powershell -command "& './EventlogQuery.1.9.9.2.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -10,7 +8,7 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.1"
+$version = "1.9.9.2"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
 $pwd = "."
@@ -87,19 +85,22 @@ if (Test-Path "$pwd\$TimestampsFile") {
   $log.Info("Cut Time Loaded")
 }
 
+[int[]]$Events = $($R.config.filter.eventid).split(",") 
+
 ###
 # Check each machine
 ###
 
-$Events = $($R.config.filter.eventid).split(",")
 $computers = @()
 
 if ($debug -ne '0'){
-	 $Events += $R.config.filter.debugeventid
+	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
 	 $computers = ('UMCS19', 'UMCS20')
 } else {
 	 For ($i=1; $i -le 500; $i++) { $computers += ('UMCVW' + (7000 + $i)) }
 }
+
+$Events = $Events | Sort-Object
 
 Foreach ($Machine in $computers) {
    $mbegin = get-date
@@ -201,6 +202,12 @@ Foreach ($Machine in $computers) {
 }
 $log.info("Matched eventlogs [$count]")
 
+#$groupbyA = $messages | Group-Object ComputerName,EventCode
+$groupby = $messages | Group-Object ComputerName,EventCode | Sort-Object Name | `
+           ConvertTo-HTML -Fragment -property @{LABEL='Name'; EXPRESSION={$_.Name.ToUpper().iReplace('.umc.com','').split(", ")[0]}}, `
+           @{LABEL='Event ID';EXPRESSION={$_.Name.split(", ")[2]}}, Count | `
+           foreach {$_.replace("</table>","</table>`n<br>").replace("<table>","<table class='group'>")}
+
 ###
 # Save last scan time for each machine and total scan result
 ###
@@ -214,7 +221,7 @@ BODY{ background-color: #FFFFFF;
       font-size: 12pt; }
 TABLE{border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse; padding:25px; width: 100%;font-size: 10pt;}
 TH{border-width: 1px;padding: 2px;border-style: solid;border-color: black;background-color:#F4D8B1}
-TD{border-width: 1px;padding: 2px;border-style: solid;border-color: black;background-color:#FFFFBE}
+TD{border-width: 1px;padding: 2px;border-style: solid;border-color: black;background-color:#FFFFBE;text-align: center;}
 .info {font-size: 16px; line-height: 24px; }
 .process {text-shadow: 0px 2px 3px #555;}
 .EventR {color: Navy; font-weight:bold;}
@@ -223,6 +230,8 @@ TD{border-width: 1px;padding: 2px;border-style: solid;border-color: black;backgr
 .gen {font-size: 8pt;}
 .id {color: red;  font-weight:bold; background-color:greenyellow;}
 TABLE TR:hover TD { background:#BAFECB !important; }
+TABLE.group {vertical-align: middle;width: auto;}
+TABLE.group TD,TH {vertical-align: middle;text-align: center; padding:2px 10px 2px 10px;}
 </style>
 "@
 
@@ -238,14 +247,17 @@ $oPost += ("<!-- {0} -->`n" -f $version)
 $attach = "$pwd\{0}{1}.html" -f $R.config.log.attachprefix, $outputT
 #$log.debug(("$attach {0} {1}" -f $R.config.log.attachprefix, $outputT))
 
+#if ($messages.count -lt 10) { $groupby = "<br>" }
+
 if ($count -gt 0) {
    #$messages | Sort-Object ComputerName, TimeGenerated | ConvertTo-HTML -Title "$outputT" -head $oHead -Body $oPost `
    #     -property ComputerName, @{LABEL="TimeGenerated"; EXPRESSION = {$_.convertToDateTime($_.TimeGenerated)}}, `
    #     EventCode, EventType, SourceName, Message, RecordNumber > "$pwd\Filter-$outputT.html"
    $messages | Sort-Object ComputerName, TimeGenerated | ConvertTo-HTML -Title "$outputT" -head $oHead -Body $oPost `
-        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper()}}, `
+        -PreContent $groupby `
+        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().iReplace('.umc.com','')}}, `
         @{LABEL="TimeGenerated"; EXPRESSION = {$_.convertToDateTime($_.TimeGenerated)}}, `
-        EventCode, EventType, SourceName, Message, RecordNumber > "$attach"
+        EventCode, EventType, SourceName, Message, RecordNumber | Set-Content "$attach"
    if ($debug) { Invoke-Item "$attach" }
    $log.debug("Matched eventlogs HTML saved")
 }
@@ -256,17 +268,18 @@ $log.debug("Cut Time CSV Saved")
 # Mail out result
 ###
 
+$emailFrom = "VDI_Scan@umc.com"
+$emailTo = $($R.config.mail.to).split(",")
+$subject = "Suspicious Events ($count)"
+$smtpServer = $R.config.mail.smtpserver
+$emailTo
+
+Send-MailMessage -To $emailTo -Subject $subject -Body " " `
+								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
+								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
+
+
 if ($count -gt 0) {
-   $emailFrom = "VDI_Scan@umc.com"
-   $emailTo = $($R.config.mail.to).split(",")
-   $subject = "Suspicious Events ($count)"
-   $smtpServer = $R.config.mail.smtpserver
-   $emailTo
-
-   Send-MailMessage -To $emailTo -Subject $subject -Body " " `
-   								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
-   								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
-
    $log.info("Mail sent")
 } else {
 	 $log.info("*** No matched eventlog entry")
