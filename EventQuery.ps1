@@ -1,6 +1,6 @@
 #Requires -version 2.0
 #
-# powershell -command "& './EventlogQuery.1.9.9.2.ps1'"
+# powershell -command "& './EventlogQuery.1.9.9.3.ps1'"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -8,10 +8,10 @@
 set-psdebug -strict
 
 $ErrorActionPreference = 'Stop'
-$version = "1.9.9.2"
+$version = "1.9.9.3"
 $configF = "EventlogQueryConfig.xml"
 $log = $null
-$pwd = "."
+$pwd = $(Get-Location)
 $begin = get-date
 
 if (-not(Test-Path $configF)) { write-host "$configF missing"; exit -999}
@@ -28,6 +28,7 @@ if ((Test-Path "$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") -a
    [System.Reflection.Assembly]::LoadFrom("$env:userprofile\My Documents\WindowsPowerShell\log4net.dll") | out-null
    $log4netconfigfile = new-Object System.Io.FileInfo("$pwd\$($R.config.log.logconfig)")
    [log4net.LogManager]::ResetConfiguration()
+   [log4net.GlobalContext]::Properties["PWD"] = $pwd
    [log4net.Config.XmlConfigurator]::ConfigureAndWatch($log4netconfigfile)
    $log = [log4net.LogManager]::GetLogger("root")
    $log.info("== Job Start $version ==")
@@ -92,6 +93,7 @@ if (Test-Path "$pwd\$TimestampsFile") {
 ###
 
 $computers = @()
+$strF = @()
 
 if ($debug -ne '0'){
 	 [int[]]$Events += $($R.config.filter.debugeventid).split(",")
@@ -133,7 +135,7 @@ Foreach ($Machine in $computers) {
 
       $strCuttime = [System.Management.ManagementDateTimeConverter]::ToDMTFDateTime($cuttime)
 
-      $log.debug("TimeWritten > $strCuttime")
+      $log.debug("Filter : TimeWritten > $strCuttime")
 
       $filter  = "logfile='$($R.config.filter.eventlogfile)' AND TimeWritten > '$strCuttime' "
       $filter += "AND (EventCode=" + [string]::join(" OR EventCode=", $Events) + ")"
@@ -179,10 +181,11 @@ Foreach ($Machine in $computers) {
       	 }
       	 $CatchFlag = 0
       } else {
+      	 $strF += ("{0} {1}" -f $Machine,$filter)
          $mend = get-date
          $mts = $mend - $mbegin
          $log.info("$Machine Process time [" + ('{0:00}:{1:00}:{2:00}' -f $mts.Hours,$mts.Minutes,$mts.Seconds) + "]")
-      }      	
+      }    	
 
    } else {
    	  $log.info("$Machine not alive")
@@ -204,16 +207,17 @@ $log.info("Matched eventlogs [$count]")
 
 #$groupbyA = $messages | Group-Object ComputerName,EventCode
 $groupby = $messages | Group-Object ComputerName,EventCode | Sort-Object Name | `
-           ConvertTo-HTML -Fragment -property @{LABEL='Name'; EXPRESSION={$_.Name.ToUpper().iReplace('.umc.com','').split(", ")[0]}}, `
+           ConvertTo-HTML -Fragment -property @{LABEL='Name'; EXPRESSION={$_.Name.ToUpper().Replace('.UMC.COM','').split(", ")[0]}}, `
            @{LABEL='Event ID';EXPRESSION={$_.Name.split(", ")[2]}}, Count | `
-           foreach {$_.replace("</table>","</table>`n<br>").replace("<table>","<table class='group'>")}
+           foreach {$_.replace("</table>","</table>`n<p><br /></p>").replace("<table>","<table class='group'>")}
 
 ###
 # Save last scan time for each machine and total scan result
 ###
 
 $oHead = @"
-<style>
+<title>$outputT</title>
+<style type="text/css">
 BODY{ background-color: #FFFFFF;
       font-family: Arial,Tahoma,sans-serif;
       font-weight: 400;
@@ -239,15 +243,16 @@ TABLE.group TD,TH {vertical-align: middle;text-align: center; padding:2px 10px 2
 $end = get-date
 $ts = $end - $begin
 
-$oPost  = ("<span class='info'><br>Event ID <span class='id'>{0}</span> Scanned`n" -f ($Events -join ","))
-$oPost += ("<br><span class='process'><span class='machine'>{4}</span> queries executed, Total Process Time <span class='Ptime'>{0:00}:{1:00}:{2:00}</span>, <span class='EventR'>{3} Events Returned</span></span><br>`n" -f $ts.Hours,$ts.Minutes,$ts.Seconds,$count,$computers.count)
-$oPost += ("<br><span class='gen'>Generated at {0}</span><p></p></span>`n" -f (get-date).ToString( "yyyy-MM-dd HH:mm:ss.ffff"))
+$oPost  = ("<p><span class='info'><br />Event ID <span class='id'>{0}</span> Scanned`n" -f ($Events -join ","))
+$oPost += ("<br /><span class='process'><span class='machine'>{4}</span> queries executed,`n Total Process Time <span class='Ptime'>{0:00}:{1:00}:{2:00}</span>,`n <span class='EventR'>{3} Events Returned</span></span><br />`n" -f $ts.Hours,$ts.Minutes,$ts.Seconds,$count,$computers.count)
+$oPost += ("<br /><span class='gen'>Generated at {0}</span><br /></span></p>`n" -f (get-date).ToString( "yyyy-MM-dd HH:mm:ss.ffff"))
 $oPost += ("<!-- {0} -->`n" -f $version)
+$oPost += ($strF | Foreach-Object -process {"<!-- {0} -->`n" -f $_})
 
 $attach = "$pwd\{0}{1}.html" -f $R.config.log.attachprefix, $outputT
 #$log.debug(("$attach {0} {1}" -f $R.config.log.attachprefix, $outputT))
 
-#if ($messages.count -lt 10) { $groupby = "<br>" }
+#if ($messages.count -lt 10) { $groupby = "<br />" }
 
 if ($count -gt 0) {
    #$messages | Sort-Object ComputerName, TimeGenerated | ConvertTo-HTML -Title "$outputT" -head $oHead -Body $oPost `
@@ -255,14 +260,14 @@ if ($count -gt 0) {
    #     EventCode, EventType, SourceName, Message, RecordNumber > "$pwd\Filter-$outputT.html"
    $messages | Sort-Object ComputerName, TimeGenerated | ConvertTo-HTML -Title "$outputT" -head $oHead -Body $oPost `
         -PreContent $groupby `
-        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().iReplace('.umc.com','')}}, `
-        @{LABEL="TimeGenerated"; EXPRESSION = {$_.convertToDateTime($_.TimeGenerated)}}, `
+        -property @{LABEL="ComputerName"; EXPRESSION = {$_.ComputerName.ToUpper().Replace('.UMC.COM','')}}, `
+        @{LABEL="TimeGenerated"; EXPRESSION = {$_.convertToDateTime($_.TimeGenerated) -f "$dateformat"}}, `
         EventCode, EventType, SourceName, Message, RecordNumber | Set-Content "$attach"
-   if ($debug) { Invoke-Item "$attach" }
+   if ($debug -and (Test-Path "$attach")) { Invoke-Item "$attach" }
    $log.debug("Matched eventlogs HTML saved")
 }
-$Timestamps.GetEnumerator() | Select Key,Value,@{Name="Type";Expression={$_.value.gettype().name}} | Export-CSV "$pwd\$TimestampsFile"
-$log.debug("Cut Time CSV Saved")
+$Timestamps.GetEnumerator() | Select Key,Value,@{Name="Type";Expression={$_.value.gettype().name}} | Export-CSV -path "$pwd\$TimestampsFile" -force
+$log.debug(("Cut Time CSV $pwd\$TimestampsFile Saved ({0})" -f ((Get-Item "$pwd\$TimestampsFile").LastWriteTime -f "$dateformat") ))
 
 ###
 # Mail out result
@@ -272,17 +277,23 @@ $emailFrom = "VDI_Scan@umc.com"
 $emailTo = $($R.config.mail.to).split(",")
 $subject = "Suspicious Events ($count)"
 $smtpServer = $R.config.mail.smtpserver
-$emailTo
-
-Send-MailMessage -To $emailTo -Subject $subject -Body " " `
-								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
-								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
-
 
 if ($count -gt 0) {
+   try {
+      Send-MailMessage -To $emailTo -Subject $subject -Body " " `
+      								 -SmtpServer $smtpServer -From $emailFrom -Attachment "$attach" `
+      								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
+   } catch {
+   }
    $log.info("Mail sent")
 } else {
-	 $log.info("*** No matched eventlog entry")
+   try {
+	    Send-MailMessage -To $emailTo -Subject $subject -Body " " `
+      								 -SmtpServer $smtpServer -From $emailFrom `
+      								 -DeliveryNotificationOption OnFailure -ErrorAction Continue
+   } catch {
+   }
+   $log.info("*** No matched eventlog entry")
 }
 
 ###
