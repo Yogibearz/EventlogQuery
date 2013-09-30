@@ -1,6 +1,6 @@
 #Requires -version 2.0
 #
-# powershell -command "& {./EventlogQuery.1.9.9.7.ps1}"
+# powershell -command "& {./EventlogQuery.1.9.9.6.ps1}"
 # C:\WINDOWS\Microsoft.NET\Framework\v1.1.4322\gacutil.exe  "%HOME%\My Documents\WindowsPowerShell\log4net.dll"
 # %UserProfile%\My Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1
 # Set-ExecutionPolicy RemoteSigned
@@ -119,15 +119,10 @@ Foreach ($Machine in $computers) {
       #   (Get-WmiObject -computername $Machine -class win32_service -Filter "Name='RemoteRegistry'").StartService()
       #}
       
-      Try {
-         $resolve = [System.Net.Dns]::GetHostAddresses($Machine)[0].IPAddressToString
-         $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
-      }
-      Catch {
-      }
-      Finally {
-         $log.info(("{0} : {1} : {2}" -f $Machine,$resolve,$reverseResolve))
-      }
+      $resolve = [System.Net.Dns]::GetHostAddresses($Machine)[0].IPAddressToString
+      $reverseResolve = [System.Net.Dns]::GetHostEntry($resolve).Hostname
+      $log.info(("{0} : {1} : {2}" -f $Machine,$resolve,$reverseResolve))
+      if ($resolve -match "10*") { Continue }
 
       $cuttime = [datetime]::ParseExact("20000101-000000", $dateformat, $null)
       #$cuttime = [datetime]::ParseExact("20120815-000000", $dateformat, $null)
