@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<config>
+       <debug>0</debug>
+       <version>1.9.9.9</version>
+       <log>
+              <logconfig>EventlogQ.config</logconfig>
+              <timestamp>Timestamps.csv</timestamp>
+              <attachprefix>Filter-</attachprefix>
+              <datetime>yyyy/MM/dd HH:mm:ss</datetime>
+              <attachpostfix>yyyyMMdd-HHmmss</attachpostfix>
+       </log>
+       <filter>
+       	      <eventlogfile>system</eventlogfile>
+       	      <eventid>7,14,41,1117,2004,6072</eventid>
+       	      <debugeventid>6013,6005,6006,1003</debugeventid>
+       </filter>
+       <mail>
+       	      <to>Arvin_CH_Lin@umc.com,Donal_Sun@umc.com,Richard_CH_Chen@umc.com,Kuan_Sheng_Wang@umc.com</to>
+       	      <smtpserver>F12AG01</smtpserver>
+       </mail>
+       <oldfiles>
+       	      <htmlfileage>14</htmlfileage>
+       	      <timestampfileage>14</timestampfileage>
+       </oldfiles>
+</config>
+
